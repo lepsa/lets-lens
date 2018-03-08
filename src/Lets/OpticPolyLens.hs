@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TupleSections #-}
 
 module Lets.OpticPolyLens (
   Lens(..)
@@ -44,7 +45,7 @@ module Lets.OpticPolyLens (
 
 import Data.Char(toUpper)
 import Data.Map(Map)
-import qualified Data.Map as Map(insert, delete, lookup)
+import qualified Data.Map as Map(insert, delete, lookup, update)
 import Data.Set(Set)
 import qualified Data.Set as Set(insert, delete, member)
 import Lets.Data(AlongsideLeft(AlongsideLeft, getAlongsideLeft), AlongsideRight(AlongsideRight, getAlongsideRight), Identity(Identity, getIdentity), Const(Const, getConst), IntAnd(IntAnd), Person(Person), Locality(Locality), Address(Address), bool)
@@ -123,8 +124,8 @@ modify ::
   -> (a -> b)
   -> s
   -> t
-modify =
-  error "todo: modify"
+modify l f s =
+  set l s . f $ get l s
 
 -- | An alias for @modify@.
 (%~) ::
@@ -153,8 +154,7 @@ infixr 4 %~
   -> b
   -> s
   -> t
-(.~) =
-  error "todo: (.~)"
+(.~) l b s = set l s b
 
 infixl 5 .~
 
@@ -174,8 +174,8 @@ fmodify ::
   -> (a -> f b)
   -> s
   -> f t 
-fmodify =
-  error "todo: fmodify"
+fmodify l f s =
+  set l s <$> f (get l s)
 
 -- |
 --
@@ -190,8 +190,7 @@ fmodify =
   -> f b
   -> s
   -> f t
-(|=) =
-  error "todo: (|=)"
+(|=) l b s= set l s <$> b
 
 infixl 5 |=
 
@@ -207,8 +206,12 @@ infixl 5 |=
 -- prop> let types = (x :: Int, y :: String) in setsetLaw fstL (x, y) z
 fstL ::
   Lens (a, x) (b, x) a b
-fstL =
-  error "todo: fstL"
+fstL = Lens $ \f (a, x) -> (,x) <$> f a
+
+--data Lens s t a b =
+--  Lens
+--    (forall f. Functor f => (a -> f b) -> s -> f t)
+
 
 -- |
 --
@@ -222,8 +225,7 @@ fstL =
 -- prop> let types = (x :: Int, y :: String) in setsetLaw sndL (x, y) z
 sndL ::
   Lens (x, a) (x, b) a b
-sndL =
-  error "todo: sndL"
+sndL = Lens $ \f (x, a) -> (x,) <$> f a
 
 -- |
 --
@@ -248,8 +250,8 @@ mapL ::
   Ord k =>
   k
   -> Lens (Map k v) (Map k v) (Maybe v) (Maybe v)
-mapL =
-  error "todo: mapL"
+mapL k = Lens $ \f m -> let f' = maybe (Map.delete k m) (\v -> Map.insert k v m)
+                        in  f' <$> f (Map.lookup k m)
 
 -- |
 --
@@ -274,8 +276,7 @@ setL ::
   Ord k =>
   k
   -> Lens (Set k) (Set k) Bool Bool
-setL =
-  error "todo: setL"
+setL k = Lens $ \f s -> bool (Set.delete k s) (Set.insert k s) <$> f (Set.member k s)
 
 -- |
 --
@@ -288,8 +289,7 @@ compose ::
   Lens s t a b
   -> Lens q r s t
   -> Lens q r a b
-compose =
-  error "todo: compose"
+compose (Lens f) (Lens g) = Lens $ g . f
 
 -- | An alias for @compose@.
 (|.) ::
@@ -310,8 +310,9 @@ infixr 9 |.
 -- 4
 identity ::
   Lens a b a b
-identity =
-  error "todo: identity"
+identity = Lens $ \f a -> f a
+
+-- Lens s t a b = forall f. Functor f => (a -> f b) -> s -> f t
 
 -- |
 --
@@ -324,8 +325,7 @@ product ::
   Lens s t a b
   -> Lens q r c d
   -> Lens (s, q) (t, r) (a, c) (b, d)
-product =
-  error "todo: product"
+product stab qrcd = Lens $ \f (a, c) -> (\(b, d) -> (set stab a b, set qrcd c d)) <$> f (get stab a, get qrcd c)
 
 -- | An alias for @product@.
 (***) ::
@@ -354,8 +354,14 @@ choice ::
   Lens s t a b
   -> Lens q r a b
   -> Lens (Either s q) (Either t r) a b
-choice =
-  error "todo: choice"
+choice stab qrab = Lens $ \f ->
+  let
+    left s = Left . set stab s <$> f (get stab s)
+    right q = Right . set qrab q <$> f (get qrab q)
+  in
+    either left right
+
+-- data Lens = Lens (forall f. Functor f => (a -> f b) -> s -> f t)
 
 -- | An alias for @choice@.
 (|||) ::
@@ -449,8 +455,7 @@ intAndL =
 getSuburb ::
   Person
   -> String
-getSuburb =
-  error "todo: getSuburb"
+getSuburb = get $ suburbL |. addressL
 
 
 -- |
@@ -464,8 +469,7 @@ setStreet ::
   Person
   -> String
   -> Person
-setStreet =
-  error "todo: setStreet"
+setStreet = set $ streetL |. addressL
 
 -- |
 --
@@ -477,8 +481,7 @@ setStreet =
 getAgeAndCountry ::
   (Person, Locality)
   -> (Int, String)
-getAgeAndCountry =
-  error "todo: getAgeAndCountry"
+getAgeAndCountry = get $ product ageL countryL
 
 -- |
 --
@@ -489,8 +492,7 @@ getAgeAndCountry =
 -- (Person 28 "Mary" (Address "83 Mary Ln" "Maryland" (Locality "Some Other City" "Western Mary" "Maristan")),Address "15 Fred St" "Fredville" (Locality "Mary Mary" "Western Mary" "Maristan"))
 setCityAndLocality ::
   (Person, Address) -> (String, Locality) -> (Person, Address)
-setCityAndLocality =
-  error "todo: setCityAndLocality"
+setCityAndLocality = set $ product (cityL |. localityL |. addressL) localityL
   
 -- |
 --

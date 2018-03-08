@@ -3,9 +3,14 @@
 
 # CABAL
 /dist
+/dist-newstyle
 /cabal-dev
 /.cabal-sandbox
 /cabal.sandbox.config
+/cabal.project.local
+
+# STACK
+/.stack-work
 
 # Haskell Program Coverage
 /.hpc

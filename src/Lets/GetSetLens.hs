@@ -37,7 +37,7 @@ module Lets.GetSetLens (
 , modifyCityUppercase
 ) where
 
-import Control.Applicative(Applicative((<*>)))
+-- import Control.Applicative(Applicative((<*>)))
 import Data.Char(toUpper)
 import Data.Map(Map)
 import qualified Data.Map as Map(insert, delete, lookup)
@@ -142,8 +142,8 @@ modify ::
   -> (b -> b)
   -> a
   -> a
-modify =
-  error "todo: modify"
+modify l f a =
+  set l a . f $ get l a
 
 -- | An alias for @modify@.
 (%~) ::
@@ -172,8 +172,8 @@ infixr 4 %~
   -> b
   -> a
   -> a
-(.~) =
-  error "todo: (.~)"
+(.~) l b a =
+  set l a b
 
 infixl 5 .~
 
@@ -193,8 +193,8 @@ fmodify ::
   -> (b -> f b)
   -> a
   -> f a
-fmodify =
-  error "todo: fmodify"
+fmodify l f a =
+  set l a <$> f (get l a)
 
 -- |
 --
@@ -209,8 +209,7 @@ fmodify =
   -> f b
   -> a
   -> f a
-(|=) =
-  error "todo: (|=)"
+(|=) l f a = set l a <$> f
 
 infixl 5 |=
 
@@ -226,8 +225,10 @@ infixl 5 |=
 -- prop> let types = (x :: Int, y :: String) in setsetLaw fstL (x, y) z
 fstL ::
   Lens (x, y) x
-fstL =
-  error "todo: fstL"
+fstL = Lens set' get'
+  where
+    set' (_, y) x' = (x', y)
+    get' (x, _) = x
 
 -- |
 --
@@ -241,8 +242,10 @@ fstL =
 -- prop> let types = (x :: Int, y :: String) in setsetLaw sndL (x, y) z
 sndL ::
   Lens (x, y) y
-sndL =
-  error "todo: sndL"
+sndL = Lens set' get'
+  where
+    set' (x, _) y' = (x, y')
+    get' (_, y) = y
 
 -- |
 --
@@ -267,8 +270,10 @@ mapL ::
   Ord k =>
   k
   -> Lens (Map k v) (Maybe v)
-mapL =
-  error "todo: mapL"
+mapL k = Lens set' get'
+  where
+    set' m v = maybe (Map.delete k m) (flip (Map.insert k) m) v
+    get' = Map.lookup k
 
 -- |
 --
@@ -293,8 +298,10 @@ setL ::
   Ord k =>
   k
   -> Lens (Set k) Bool
-setL =
-  error "todo: setL"
+setL k = Lens set' get'
+  where
+    set' s b = bool (Set.delete k s) (Set.insert k s) b
+    get' = Set.member k
 
 -- |
 --
@@ -307,8 +314,10 @@ compose ::
   Lens b c
   -> Lens a b
   -> Lens a c
-compose =
-  error "todo: compose"
+compose f g = Lens set' get'
+  where
+    set' a c = set g a $ set f (get g a) c
+    get' = get f . get g
 
 -- | An alias for @compose@.
 (|.) ::
@@ -329,8 +338,7 @@ infixr 9 |.
 -- 4
 identity ::
   Lens a a
-identity =
-  error "todo: identity"
+identity = Lens (flip const) id
 
 -- |
 --
@@ -343,8 +351,10 @@ product ::
   Lens a b
   -> Lens c d
   -> Lens (a, c) (b, d)
-product =
-  error "todo: product"
+product f g = Lens set' get'
+  where
+    set' (a, c) (b, d) = (set f a b, set g c d)
+    get' (a, c) = (get f a, get g c)
 
 -- | An alias for @product@.
 (***) ::
@@ -373,8 +383,10 @@ choice ::
   Lens a x
   -> Lens b x
   -> Lens (Either a b) x
-choice =
-  error "todo: choice"
+choice l r = Lens set' get'
+  where
+    set' e x = either (Left . (l .~ x)) (Right . (r .~ x)) e
+    get' = either (get l) (get r)
 
 -- | An alias for @choice@.
 (|||) ::
@@ -462,7 +474,7 @@ getSuburb ::
   Person
   -> String
 getSuburb =
-  error "todo: getSuburb"
+  get $ compose suburbL addressL
 
 -- |
 --
@@ -475,8 +487,7 @@ setStreet ::
   Person
   -> String
   -> Person
-setStreet =
-  error "todo: setStreet"
+setStreet = set $ compose streetL addressL
 
 -- |
 --
@@ -488,8 +499,7 @@ setStreet =
 getAgeAndCountry ::
   (Person, Locality)
   -> (Int, String)
-getAgeAndCountry =
-  error "todo: getAgeAndCountry"
+getAgeAndCountry = get $ product ageL countryL
 
 -- |
 --
@@ -501,8 +511,7 @@ getAgeAndCountry =
 setCityAndLocality ::
   (Person, Address) -> (String, Locality) -> (Person, Address)
 setCityAndLocality =
-  error "todo: setCityAndLocality"
-  
+  set $ product (compose cityL $ compose localityL addressL) localityL
 -- |
 --
 -- >>> getSuburbOrCity (Left maryAddress)
@@ -514,8 +523,7 @@ getSuburbOrCity ::
   Either Address Locality
   -> String
 getSuburbOrCity =
-  error "todo: getSuburbOrCity"
-
+  get (choice suburbL cityL)
 -- |
 --
 -- >>> setStreetOrState (Right maryLocality) "Some Other State"
@@ -528,7 +536,7 @@ setStreetOrState ::
   -> String
   -> Either Person Locality
 setStreetOrState =
-  error "todo: setStreetOrState"
+  set $ choice (compose streetL addressL) stateL
 
 -- |
 --
@@ -541,4 +549,4 @@ modifyCityUppercase ::
   Person
   -> Person
 modifyCityUppercase =
-  error "todo: modifyCityUppercase"
+  compose cityL (compose localityL addressL) %~ fmap toUpper
